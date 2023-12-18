@@ -73,12 +73,17 @@ pub fn withdraw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    ids: Vec<u64>,
+    mut ids: Vec<u64>,
 ) -> Result<Response, ContractError> {
     let mut lockups: Vec<Lockup> = vec![];
     let mut total_amount = Uint128::zero();
 
+    //fix: proposed fix is to eliminate duplicated id value. 
+    ids.sort();
+    ids.dedup();
+
     // fetch vaults to process
+    // vulnerability: in case of duplicated ids, there is a chance that someone will pass vector containing a lot of same ids, and thus drain funds.
     for lockup_id in ids.clone() {
         let lockup = LOCKUPS.load(deps.storage, lockup_id).unwrap();
         lockups.push(lockup);
