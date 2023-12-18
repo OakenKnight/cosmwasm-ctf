@@ -22,19 +22,20 @@ Please check the challenge's [integration_tests](./src/integration_test.rs) for 
 **:star: Goal for the challenge:**
 - Demonstrate how an unprivileged user can achieve an unfair amount of voting power.
 
-## Scoring
+## Vulnerability 
 
-This challenge has been assigned a total of **150** points: 
-- **40** points will be awarded for a proper description of the finding that allows you to achieve the **Goal** above.
-- **35** points will be awarded for a proper recommendation that fixes the issue.
-- If the report is deemed valid, the remaining **75** additional points will be awarded for a working Proof of Concept exploit of the vulnerability.
+Vulnerability presents itself in ability for user to get extremely large amount of voting power by abusing overflow.
+Problematic part of code:
 
-:exclamation: The usage of [`cw-multi-test`](https://github.com/CosmWasm/cw-multi-test) is **mandatory** for the PoC, please take the approach of the provided integration tests as a suggestion.
+```rust
+    user.voting_power -= unlock_amount;
+```
 
-:exclamation: Remember that insider threats and centralization concerns are out of the scope of the CTF.
+Main cause of the vulnerability is having configuration parameter `overflow-checks` was set to `false` in `Cargo.toml`. This will cause overflow when executing `unstake` because `voting_power` is of type `u128`.
+Problem will not appear when debugging test and unstaking more then staked will cause `panic`, but in `release` mode, it will cause overflow.
 
-## Any questions?
+## Solution
 
-If you are unsure about the contract's logic or expected behavior, drop your question on the [official Telegram channel](https://t.me/+8ilY7qeG4stlYzJi) and one of our team members will reply to you as soon as possible.
-
-Please remember that only questions about the functionality from the point of view of a standard user will be answered. Potential solutions, vulnerabilities, threat analysis or any other "attacker-minded" questions should never be discussed publicly in the channel and will not be answered.
+```rust
+overflow-checks = true
+```

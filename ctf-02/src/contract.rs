@@ -67,6 +67,7 @@ pub fn withdraw(
     // decrease total stake
     let mut user = VOTING_POWER.load(deps.storage, &info.sender).unwrap();
 
+    // will panic if tried to take bigger amount than there is available 
     user.total_tokens -= amount;
 
     // cannot withdraw staked tokens
@@ -134,6 +135,8 @@ pub fn unstake(
         return Err(ContractError::Unauthorized {});
     }
 
+    // will not panic if tried to take bigger amount than there is available if compiled in release mode with 
+    // overflow-checks = false
     user.voting_power -= unlock_amount;
 
     VOTING_POWER
