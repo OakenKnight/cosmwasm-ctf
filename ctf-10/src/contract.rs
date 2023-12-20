@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, wasm_instantiate, Addr, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo,
-    Reply, Response, StdResult, SubMsg, WasmMsg,
+    Reply, Response, StdResult, SubMsg, WasmMsg, Timestamp,
 };
 use cw721::TokensResponse;
 use cw721_base::{
@@ -12,9 +12,11 @@ use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, Whitelist, CONFIG, WHITELIST};
+use crate::state::{Config, Whitelist, CONFIG, WHITELIST, MintedNFT, MINT_PER_USER};
 
 pub const DENOM: &str = "uawesome";
+const DEFAULT_LIMIT: u32 = 3;
+const MAX_LIMIT: u32 = 10;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -82,7 +84,7 @@ pub fn execute(
 }
 
 /// Mint NFT to recipient
-pub fn mint(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+pub fn mint(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
 
     // check user is in whitelist
@@ -91,18 +93,16 @@ pub fn mint(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, Con
     if !is_whitelisted {
         return Err(ContractError::NotWhitelisted {});
     }
-
-    let tokens_response: TokensResponse = deps.querier.query_wasm_smart(
-        config.nft_contract.to_string(),
-        &Cw721QueryMsg::Tokens::<Empty> {
-            owner: info.sender.to_string(),
-            start_after: None,
+    let minted_nfts: Vec<MintedNFT> = deps.querier.query_wasm_smart(
+        env.contract.address.to_string(),
+        &QueryMsg::MintPerUser {
+            user: info.sender.to_string(),
             limit: None,
         },
     )?;
 
     // ensure mint per user limit is not exceeded
-    if tokens_response.tokens.len() >= config.mint_per_user as usize {
+    if minted_nfts.len() >= config.mint_per_user as usize {
         return Err(ContractError::MaxLimitExceeded {});
     }
 
@@ -122,6 +122,19 @@ pub fn mint(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, Con
     // increment total tokens
     config.total_tokens += 1;
     CONFIG.save(deps.storage, &config)?;
+
+
+    let mut minted_nfts = MINT_PER_USER
+        .load(deps.storage, &info.sender)
+        .unwrap_or_default();
+    let nft_to_mint : MintedNFT = MintedNFT {
+        nft_id : token_id,
+        timestamp : env.block.time.seconds(),
+    };
+
+    minted_nfts.push(nft_to_mint);
+
+    MINT_PER_USER.save(deps.storage, &info.sender, &minted_nfts)?;
 
     Ok(Response::new()
         .add_attribute("action", "mint")
@@ -150,7 +163,24 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::Whitelist {} => to_binary(&query_whitelist(deps)?),
+        QueryMsg::MintPerUser { user, limit } => to_binary(&query_mint_per_user(deps, user, limit)?)
     }
+}
+
+/// Returns mint per user
+fn query_mint_per_user(deps: Deps, user: String, limit: Option<u32>) -> StdResult<Vec<MintedNFT>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let user_addr = deps.api.addr_validate(&user)?;
+    
+    let mints = MINT_PER_USER
+        .load(deps.storage, &user_addr)
+        .unwrap_or_default()
+        .into_iter()
+        .take(limit)
+        .collect();
+
+    Ok(mints)
+
 }
 
 /// Returns contract configuration

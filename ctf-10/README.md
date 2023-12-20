@@ -19,20 +19,70 @@ Please check the challenge's [integration_tests](./src/integration_test.rs) for 
 **:star: Goal for the challenge:**
 - Demonstrate how whitelisted users can bypass the `mint_per_user` limitation.
 
-## Scoring
+## Vulnerability
 
-This challenge has been assigned a total of **90** points: 
-- **20** points will be awarded for a proper description of the finding that allows you to achieve the **Goal** above.
-- **25** points will be awarded for a proper recommendation that fixes the issue.
-- If the report is deemed valid, the remaining **45** additional points will be awarded for a working Proof of Concept exploit of the vulnerability.
+Vulnerability presents itself when checking for minted tokens by user. Checking if user is able to mint token is done by tracking the number of tokens owned by user. If tokens are transfered to other accounts, that account will be able to mint more tokens and send them to not whitelisted addresses.
+
+Problematic part of code:
+```rust
+    let tokens_response: TokensResponse = deps.querier.query_wasm_smart(
+        config.nft_contract.to_string(),
+        &Cw721QueryMsg::Tokens::<Empty> {
+            owner: info.sender.to_string(),
+            start_after: None,
+            limit: None,
+        },
+    )?;
+
+    // ensure mint per user limit is not exceeded
+    if tokens_response.tokens.len() >= config.mint_per_user as usize {
+        return Err(ContractError::MaxLimitExceeded {});
+    }
+```
 
 
-:exclamation: The usage of [`cw-multi-test`](https://github.com/CosmWasm/cw-multi-test) is **mandatory** for the PoC, please take the approach of the provided integration tests as a suggestion.
+## Solution
 
-:exclamation: Remember that insider threats and centralization concerns are out of the scope of the CTF.
+Solution is not to track number of currently owned tokens by user, but rather to store the tokens in contract state in a map:
 
-## Any questions?
+```rust
+#[cw_serde]
+    pub struct MintedNFT {
+        /// whitelisted users to receive NFTs
+        pub nft_id: u128,
+        pub timestamp: u64
+    }
+    pub const MINT_PER_USER: Map<&Addr, Vec<MintedNFT>> = Map::new("mint_per_user");
+```
 
-If you are unsure about the contract's logic or expected behavior, drop your question on the [official Telegram channel](https://t.me/+8ilY7qeG4stlYzJi) and one of our team members will reply to you as soon as possible. 
+After every minting of token, map needs to be updated.
+```rust
+    let mut minted_nfts = MINT_PER_USER
+        .load(deps.storage, &info.sender)
+        .unwrap_or_default();
+    let nft_to_mint : MintedNFT = MintedNFT {
+        nft_id : token_id,
+        timestamp : env.block.time.seconds(),
+    };
 
-Please remember that only questions about the functionality from the point of view of a standard user will be answered. Potential solutions, vulnerabilities, threat analysis or any other "attacker-minded" questions should never be discussed publicly in the channel and will not be answered.
+    minted_nfts.push(nft_to_mint);
+
+    MINT_PER_USER.save(deps.storage, &info.sender, &minted_nfts)?;
+```
+
+New condition to mint token should look like this: 
+
+```rust
+    let minted_nfts: Vec<MintedNFT> = deps.querier.query_wasm_smart(
+        env.contract.address.to_string(),
+        &QueryMsg::MintPerUser {
+            user: info.sender.to_string(),
+            limit: None,
+        },
+    )?;
+
+    // ensure mint per user limit is not exceeded
+    if minted_nfts.len() >= config.mint_per_user as usize {
+        return Err(ContractError::MaxLimitExceeded {});
+    }
+```
