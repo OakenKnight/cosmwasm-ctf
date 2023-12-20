@@ -3,7 +3,6 @@
 ## Challenge 04: *Gram*
 
 Simplified vault for minting shares proportional to the current balance of the contract, it allows to redeem back for funds afterwards.
-
 ### Execute entry points:
 ```rust
 pub enum ExecuteMsg {
@@ -22,20 +21,58 @@ Please check the challenge's [integration_tests](./src/integration_test.rs) for 
 **:star: Goal for the challenge:**
 - Demonstrate how an unprivileged user can withdraw more funds than deposited.
 
-## Scoring
+## Vulnerability
 
-This challenge has been assigned a total of **150** points: 
-- **40** points will be awarded for a proper description of the finding that allows you to achieve the **Goal** above.
-- **35** points will be awarded for a proper recommendation that fixes the issue.
-- If the report is deemed valid, the remaining **75** additional points will be awarded for a working Proof of Concept exploit of the vulnerability.
+Attacker can abuse mint&burn mechanism, due to poor mathematic formula used to calculate `mint_amount` and `asset_to_return`.
+Actions to gain more tokens than deposited.
+
+| Action | Attacker minted/deposited/gained token | User minted/depositet/gained token | Value in contract |Total supply minted|
+| --------- | ----------- |------- | ----------- | --- |
+|1. Attacker deposits 1 token | 1 | 0 | 0 | 0 |
+|2. Attacker mints 1 token | 1 | 0| 1 | 1 |
+|3. User deposits 20_000 tokens. | 1| 20_000| 1 | 1 |
+|4. Attacker sends 10_000 tokens to contract address | 1 | 20_000 | 30_001 | 1 |
+|5. User mints 20000 tokens | 1 | 20_000 | 30_001 | 2 |
+|6. Attacker burns 1 token | 15_000 | 1 | 15_001 | 1 |
+|7. User tries to burn 20_000 minted tokens | panic | panic| panic | panic|
+
+In the end, attacker spent 10001 token to gain 15001 tokens back after burning, which leads to 4999 tokens profit after mint & burn abuse.
+
+Problematic part of code in minting function:
+```rust
+    let mint_amount = if total_supply.is_zero() {
+        amount
+    } else {
+        amount.multiply_ratio(total_supply, total_assets)
+    };
+```
+
+Problematic part of code in burning function:
+```rust
+    let asset_to_return = shares.multiply_ratio(total_assets, total_supply);
+```
+
+## Solution
+
+Solution is to change minting and burning mechanism formula.
+
+Proposed fix for minting formula:
+
+```rust
+    let mint_amount = amount.multiply_ratio(
+        total_supply + Uint128::new(10_u32.pow(DECIMAL_OFFSET).into()),
+        total_assets + Uint128::one(),
+    );
+```
+This fix heaviely relies on OpenZeppelin Solidity ERC-4626 Tokenized Vault Standard smart contract template: [link](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/f213a10522a7bd808561c5a4b17266065a199dc7/contracts/token/ERC20/extensions/ERC4626.sol#L226C1-L231C6)
 
 
-:exclamation: The usage of [`cw-multi-test`](https://github.com/CosmWasm/cw-multi-test) is **mandatory** for the PoC, please take the approach of the provided integration tests as a suggestion.
+Proposed fix for burning formula:
+```rust
+    let asset_to_return = shares.multiply_ratio(
+        total_assets + Uint128::one(),
+        total_supply + Uint128::new(10_u32.pow(DECIMAL_OFFSET).into()),
+    );
+```
 
-:exclamation: Remember that insider threats and centralization concerns are out of the scope of the CTF.
-
-## Any questions?
-
-If you are unsure about the contract's logic or expected behavior, drop your question on the [official Telegram channel](https://t.me/+8ilY7qeG4stlYzJi) and one of our team members will reply to you as soon as possible. 
-
-Please remember that only questions about the functionality from the point of view of a standard user will be answered. Potential solutions, vulnerabilities, threat analysis or any other "attacker-minded" questions should never be discussed publicly in the channel and will not be answered.
+This fix heaviely relies on OpenZeppelin Solidity ERC-4626 Tokenized Vault Standard smart contract template: [link](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/f213a10522a7bd808561c5a4b17266065a199dc7/contracts/token/ERC20/extensions/ERC4626.sol#L233C3-L238)
