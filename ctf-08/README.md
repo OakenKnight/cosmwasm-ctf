@@ -41,20 +41,52 @@ Please check the challenge's [integration_tests](./src/integration_test.rs) for 
 **:star: Goal for the challenge:**
 - Demonstrate how a user can retrieve other users' NFT for free.
 
-## Scoring
+## Vulnerability
 
-This challenge has been assigned a total of **150** points: 
-- **40** points will be awarded for a proper description of the finding that allows you to achieve the **Goal** above.
-- **35** points will be awarded for a proper recommendation that fixes the issue.
-- If the report is deemed valid, the remaining **75** additional points will be awarded for a working Proof of Concept exploit of the vulnerability.
+There are two vulnerabilities.
+
+1. Not removing sale from the state after successfull trade was completed
+2. There is no checking success of it is not checked in the reply entry point.
 
 
-:exclamation: The usage of [`cw-multi-test`](https://github.com/CosmWasm/cw-multi-test) is **mandatory** for the PoC, please take the approach of the provided integration tests as a suggestion.
+Problematic part of code for second vulnerability:
 
-:exclamation: Remember that insider threats and centralization concerns are out of the scope of the CTF.
+```rust
+    let mut submsgs = vec![SubMsg::reply_always(
+        WasmMsg::Execute {
+            contract_addr: config.nft_contract.to_string(),
+            msg: to_binary(&Cw721ExecuteMsg::TransferNft {
+                recipient: trade.trader.to_string(),
+                token_id: trade.asked_id.clone(),
+            })?,
+            funds: vec![],
+        },
+        TRADE_REPLY,
+    )];
+```
+And
+```rust
+    submsgs.push(SubMsg::reply_always(
+        WasmMsg::Execute {
+            contract_addr: config.nft_contract.to_string(),
+            msg: to_binary(&Cw721ExecuteMsg::TransferNft {
+                recipient: sale.owner.to_string(),
+                token_id: trade.to_trade_id.clone(),
+            })?,
+            funds: vec![],
+        },
+        TRADE_REPLY,
+    ));
+```
 
-## Any questions?
+In addition, when a user offers a trade to an existing Sale, the contract does not require the NFT to be transferred and only validates that the trader is the current owner.
 
-If you are unsure about the contract's logic or expected behavior, drop your question on the [official Telegram channel](https://t.me/+8ilY7qeG4stlYzJi) and one of our team members will reply to you as soon as possible. 
 
-Please remember that only questions about the functionality from the point of view of a standard user will be answered. Potential solutions, vulnerabilities, threat analysis or any other "attacker-minded" questions should never be discussed publicly in the channel and will not be answered.
+## Solution
+
+Solution to the first problem is to remove sale from storage if trade was accepted.
+```rust
+    SALES.remove(deps.storage, trade.asked_id.clone());
+```
+
+Solution to the second problem is to change `reply_always` to `reply_on_success`.

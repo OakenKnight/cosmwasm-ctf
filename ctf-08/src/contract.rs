@@ -254,7 +254,7 @@ pub fn exec_accept_trade(
     let config = CONFIG.load(deps.storage)?;
 
     // Asked
-    let mut submsgs = vec![SubMsg::reply_always(
+    let mut submsgs = vec![SubMsg::reply_on_success(
         WasmMsg::Execute {
             contract_addr: config.nft_contract.to_string(),
             msg: to_binary(&Cw721ExecuteMsg::TransferNft {
@@ -267,7 +267,7 @@ pub fn exec_accept_trade(
     )];
 
     // Offered
-    submsgs.push(SubMsg::reply_always(
+    submsgs.push(SubMsg::reply_on_success(
         WasmMsg::Execute {
             contract_addr: config.nft_contract.to_string(),
             msg: to_binary(&Cw721ExecuteMsg::TransferNft {
@@ -283,6 +283,7 @@ pub fn exec_accept_trade(
         deps.storage,
         (trade.asked_id.clone(), trade.trader.to_string()),
     );
+    SALES.remove(deps.storage, trade.asked_id.clone());
 
     Ok(Response::new()
         .add_attribute("action", "NFT traded")

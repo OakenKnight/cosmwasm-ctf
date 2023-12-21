@@ -189,6 +189,19 @@ pub mod tests {
             &[],
         )
         .unwrap();
+        // Minting one to User2
+        app.execute_contract(
+            Addr::unchecked(ADMIN),
+            token_addr.clone(),
+            &cw721_base::msg::ExecuteMsg::Mint::<Empty, Empty> {
+                token_id: NFT3.to_string(),
+                owner: USER3.to_string(),
+                token_uri: Some("https://www.oaksecurity.io".to_string()),
+                extension: Empty::default(),
+            },
+            &[],
+        )
+        .unwrap();
 
         // Seller approves to transfer the NFT
         app.execute_contract(
