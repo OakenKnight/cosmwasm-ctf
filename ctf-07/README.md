@@ -4,7 +4,8 @@
 
 Simplified vault that accounts for the top depositor! The `owner` can set the threshold to become top depositor.
 
-### Execute entry points:
+### Execute entry points
+
 ```rust
 pub enum ExecuteMsg {
     Deposit {},
@@ -17,27 +18,35 @@ pub enum ExecuteMsg {
 Please check the challenge's [integration_tests](./src/integration_test.rs) for expected usage examples. You can use these tests as a base to create your exploit Proof of Concept.
 
 **:house: Base scenario:**
+
 - The contract is newly instantiated.
-- `USER1` and `USER2` deposit 10_000 tokens each
+- `USER1` and `USER2` deposit 100 tokens each
 - The owner role is assigned to the `ADMIN` address
+- Threshold is set to 99 when instantiating contract
 
 **:star: Goal for the challenge:**
+
 - Demonstrate how an unprivileged user can drain all the contract's funds.
 
-## Scoring
+## Vulnerability
 
-This challenge has been assigned a total of **150** points: 
-- **40** points will be awarded for a proper description of the finding that allows you to achieve the **Goal** above.
-- **35** points will be awarded for a proper recommendation that fixes the issue.
-- If the report is deemed valid, the remaining **75** additional points will be awarded for a working Proof of Concept exploit of the vulnerability.
+Vulnerability lies in using the same storage key for both `TOP_DEPOSITOR` and `OWNER` states. By becoming the `TOP_DEPOSITOR` malicious user can become the `OWNER` and thus act maliciously.
+`TOP_DEPOSITOR` state from `contract.rs`.
 
+```rust
+pub const TOP_DEPOSITOR: Item<Addr> = Item::new("address");
+```
 
-:exclamation: The usage of [`cw-multi-test`](https://github.com/CosmWasm/cw-multi-test) is **mandatory** for the PoC, please take the approach of the provided integration tests as a suggestion.
+`OWNER` state from `contract.rs`.
 
-:exclamation: Remember that insider threats and centralization concerns are out of the scope of the CTF.
+```rust
+pub const OWNER: Item<Addr> = Item::new("address");
+```
 
-## Any questions?
+## Solution
 
-If you are unsure about the contract's logic or expected behavior, drop your question on the [official Telegram channel](https://t.me/+8ilY7qeG4stlYzJi) and one of our team members will reply to you as soon as possible. 
+Solution is to change the storage key for `TOP_DEPOSITOR`.
 
-Please remember that only questions about the functionality from the point of view of a standard user will be answered. Potential solutions, vulnerabilities, threat analysis or any other "attacker-minded" questions should never be discussed publicly in the channel and will not be answered.
+```rust
+pub const TOP_DEPOSITOR: Item<Addr> = Item::new("top_depositor");
+```
