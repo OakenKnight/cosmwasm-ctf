@@ -24,20 +24,50 @@ Please check the challenge's [integration_tests](./src/integration_test.rs) for 
 **:star: Goal for the challenge:**
 - Demonstrate how a proposer can obtain the owner role without controlling 1/3 of the total supply.
 
-## Scoring
+## Vulnerability
 
-This challenge has been assigned a total of **150** points: 
-- **40** points will be awarded for a proper description of the finding that allows you to achieve the **Goal** above.
-- **35** points will be awarded for a proper recommendation that fixes the issue.
-- If the report is deemed valid, the remaining **75** additional points will be awarded for a working Proof of Concept exploit of the vulnerability.
+Vulnerability presents itself because the contract checks for contract `balance`. That implies the following scenario.
 
+```rust
+    if balance.balance >= (vtoken_info.total_supply / Uint128::from(3u32)) {
+        CONFIG.update(deps.storage, |mut config| -> StdResult<_> {
+            config.owner = current_proposal.proposer;
+            Ok(config)
+        })?;
+        response = response.add_attribute("result", "Passed");
+    } else {
+        PROPOSAL.remove(deps.storage);
+        response = response.add_attribute("result", "Failed");
+    }
+```
 
-:exclamation: The usage of [`cw-multi-test`](https://github.com/CosmWasm/cw-multi-test) is **mandatory** for the PoC, please take the approach of the provided integration tests as a suggestion.
+| action | total tokens | User1 | Attacker | contract balance| 
+|--------| ------------ | ----- | ----- | -------- |
+| / |  12 | 3 | 1 | 0 |
+| User1 proposes | 12 | 0 | 1 | 3 |
+| User1 proposes end - *FAIL* | 12 | 0 | 1 | 3 |
+| Attacker proposes| 12 | 0 | 0 | 4|
+| Attacker proposes end - *SUCCESS* | 12 | 0 | 0 | 4 |
 
-:exclamation: Remember that insider threats and centralization concerns are out of the scope of the CTF.
+After User1 proposed the end, the assets didnt return to him, but rather stayed on the contract. After that, attacker is able to propose another challenge with 1 token, and win the ownership.
 
-## Any questions?
+Also there is a problem with matching in `receive_cw20` function. If any message, except for `CastVote` is sent, `match` will just return `Ok(Response::default())`.
 
-If you are unsure about the contract's logic or expected behavior, drop your question on the [official Telegram channel](https://t.me/+8ilY7qeG4stlYzJi) and one of our team members will reply to you as soon as possible. 
+## Solution
 
-Please remember that only questions about the functionality from the point of view of a standard user will be answered. Potential solutions, vulnerabilities, threat analysis or any other "attacker-minded" questions should never be discussed publicly in the channel and will not be answered.
+Solution is to track how much tokens is voted with on proposal. That data needs to be saved in state and used later when checking if proposer has won or not.
+
+```rust
+ if current_proposal.voted_with >= (vtoken_info.total_supply / Uint128::from(3u32)) {
+        CONFIG.update(deps.storage, |mut config| -> StdResult<_> {
+            config.owner = current_proposal.proposer;
+            Ok(config)
+        })?;
+        response = response.add_attribute("result", "Passed");
+    } else {
+        PROPOSAL.remove(deps.storage);
+        response = response.add_attribute("result", "Failed");
+    }
+```
+
+Now, about other problem regarding matching. Match function should return `Err(ContractError::Unauthorized {})` instead of `Ok(Response::default())`.
