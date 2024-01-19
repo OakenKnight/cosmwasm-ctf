@@ -223,7 +223,6 @@ pub mod tests {
             &ExecuteMsg::NewSale {
                 id: NFT1.to_string(),
                 price: Uint128::from(100u128),
-                tradable: true,
             },
             &[],
         )
@@ -249,7 +248,6 @@ pub mod tests {
             &ExecuteMsg::NewSale {
                 id: NFT2.to_string(),
                 price: Uint128::from(150u128),
-                tradable: false,
             },
             &[],
         )
@@ -293,7 +291,6 @@ pub mod tests {
             &ExecuteMsg::NewSale {
                 id: NFT1.to_string(),
                 price: Uint128::from(100u128),
-                tradable: true,
             },
             &[],
         )

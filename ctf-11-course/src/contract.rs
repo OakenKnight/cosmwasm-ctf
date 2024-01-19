@@ -12,7 +12,6 @@ use crate::state::{Config, Sale, Trade, CONFIG, OPERATIONS, SALES, TRADES};
 
 pub const DENOM: &str = "uawesome";
 pub const TRADE_REPLY: u64 = 1;
-pub const SALE_REPLY: u64 = 2;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -42,8 +41,7 @@ pub fn execute(
         ExecuteMsg::NewSale {
             id,
             price,
-            tradable,
-        } => exec_new_sale(deps, env, info, id, price, tradable),
+        } => exec_new_sale(deps, env, info, id, price),
         ExecuteMsg::NewTrade { target, offered } => {
             exec_new_trade(deps, env, info, target, offered)
         }
@@ -58,7 +56,6 @@ pub fn exec_new_sale(
     info: MessageInfo,
     id: String,
     price: Uint128,
-    tradable: bool,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
@@ -78,7 +75,6 @@ pub fn exec_new_sale(
         nft_id: id.clone(),
         price,
         owner: info.sender,
-        tradable,
     };
     SALES.save(deps.storage, id.clone(), &new_sale)?;
 
@@ -132,12 +128,6 @@ pub fn exec_new_trade(
             },
         )
         .unwrap();
-
-    let sale = SALES.load(deps.storage, asked_id.clone())?;
-
-    if !sale.tradable {
-        return Err(ContractError::NonTradeable {});
-    }
 
     let new_trade = Trade {
         asked_id: asked_id.clone(),
@@ -215,12 +205,6 @@ pub fn exec_accept_trade(
 pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
     let mut ops = OPERATIONS.load(deps.storage).unwrap_or_default();
     match reply.id {
-        SALE_REPLY => {
-            ops.n_sales += Uint128::one();
-            OPERATIONS.save(deps.storage, &ops)?;
-
-            Ok(Response::new().add_attribute("Operation", "sale"))
-        }
         TRADE_REPLY => {
             ops.n_trades += Uint128::one();
             OPERATIONS.save(deps.storage, &ops)?;

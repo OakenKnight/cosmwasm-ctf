@@ -14,7 +14,6 @@ pub struct Sale {
     pub nft_id: String,
     pub price: Uint128,
     pub owner: Addr,
-    pub tradable: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]

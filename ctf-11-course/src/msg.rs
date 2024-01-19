@@ -11,7 +11,6 @@ pub enum ExecuteMsg {
     NewSale {
         id: String,
         price: Uint128,
-        tradable: bool,
     },
     NewTrade {
         target: String,
