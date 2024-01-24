@@ -1,7 +1,7 @@
 [package]
-name = "informal-cosmwasm-ctf-11"
+name = "ctf-11"
 version = "0.1.0"
-authors = ["OakenKnight <aleksandarignjatijevic@informal.systems>"]
+authors = ["OakenKnight <a.ignjatijevic@gmail.com>"]
 edition = "2021"
 
 exclude = [
